@@ -68,6 +68,7 @@ public class SnapshotProcessor extends AbstractProcessor {
     private final SchemaHolder schemaHolder;
     private final RecordMaker recordMaker;
     private final CassandraConnectorConfig.SnapshotMode snapshotMode;
+    private final Set<String> configIncludedTables;
     private final ConsistencyLevel consistencyLevel;
     private final Set<String> startedTableNames = new HashSet<>();
     private final SnapshotProcessorMetrics metrics = new SnapshotProcessorMetrics();
@@ -84,6 +85,7 @@ public class SnapshotProcessor extends AbstractProcessor {
                 new Filters(context.getCassandraConnectorConfig().fieldExcludeList()),
                 context.getCassandraConnectorConfig());
         snapshotMode = context.getCassandraConnectorConfig().snapshotMode();
+        configIncludedTables = context.getCassandraConnectorConfig().getTableIncludeList();
         consistencyLevel = context.getCassandraConnectorConfig().snapshotConsistencyLevel();
         this.clusterName = clusterName;
     }
@@ -148,11 +150,13 @@ public class SnapshotProcessor extends AbstractProcessor {
      * Return a set of {@link TableMetadata} for tables that have not been snapshotted but have CDC enabled.
      */
     private Set<TableMetadata> getTablesToSnapshot() {
+        // --| todo:Utsav filter the tables here based on the connector config table include list
         LOGGER.info("Present tables: {}", schemaHolder.getCdcEnabledTableMetadataSet().stream().map(tmd -> tmd.describe(true)).collect(Collectors.toList()));
 
         return schemaHolder.getCdcEnabledTableMetadataSet().stream()
                 .filter(tm -> !offsetWriter.isOffsetProcessed(tableName(tm), OffsetPosition.defaultOffsetPosition().serialize(), true))
                 .filter(tm -> !startedTableNames.contains(tableName(tm)))
+                .filter(tm -> configIncludedTables.contains(tableName(tm)))
                 .collect(Collectors.toSet());
     }
 

@@ -9,10 +9,12 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Properties;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import org.apache.kafka.clients.producer.ProducerConfig;
@@ -263,10 +265,15 @@ public class CassandraConnectorConfig extends CommonConnectorConfig {
      * See {@link SnapshotMode for details}.
      */
     public static final String DEFAULT_SNAPSHOT_MODE = "INITIAL";
+    public static final String DEFAULT_TABLE_INCLUDE_LIST = "";
     public static final Field SNAPSHOT_MODE = Field.create("snapshot.mode")
             .withType(Type.STRING)
             .withDefault(DEFAULT_SNAPSHOT_MODE)
             .withDescription("Specifies the criteria for running a snapshot (eg. initial sync) upon startup of the cassandra connector agent.");
+    public static final Field TABLE_INCLUDE_LIST = Field.create("table.include.list")
+            .withType(Type.STRING)
+            .withDefault(DEFAULT_TABLE_INCLUDE_LIST)
+            .withDescription("Specifies what all the tables need to be fetched.");
 
     /**
      * Specify the {@link ConsistencyLevel} used for the snapshot query.
@@ -513,6 +520,15 @@ public class CassandraConnectorConfig extends CommonConnectorConfig {
         String mode = this.getConfig().getString(SNAPSHOT_MODE);
         Optional<SnapshotMode> snapshotModeOpt = SnapshotMode.fromText(mode);
         return snapshotModeOpt.orElseThrow(() -> new CassandraConnectorConfigException(mode + " is not a valid SnapshotMode"));
+    }
+    public Set<String> getTableIncludeList() {
+        String input = this.getConfig().getString(TABLE_INCLUDE_LIST);
+        Set<String> tableSet = new HashSet<>();
+        String[] strings = input.split(",");
+        for (String str : strings) {
+            tableSet.add(str);
+        }
+        return tableSet;
     }
 
     public ConsistencyLevel snapshotConsistencyLevel() {
