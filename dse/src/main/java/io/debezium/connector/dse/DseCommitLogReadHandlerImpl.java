@@ -23,6 +23,20 @@ import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
+import io.debezium.connector.cassandra.CassandraConnectorConfig;
+import io.debezium.connector.cassandra.CassandraConnectorContext;
+import io.debezium.connector.cassandra.CassandraSchemaFactory;
+import io.debezium.connector.cassandra.CommitLogProcessorMetrics;
+import io.debezium.connector.cassandra.Event;
+import io.debezium.connector.cassandra.Filters;
+import io.debezium.connector.cassandra.KeyValueSchema;
+import io.debezium.connector.cassandra.KeyspaceTable;
+import io.debezium.connector.cassandra.OffsetPosition;
+import io.debezium.connector.cassandra.OffsetWriter;
+import io.debezium.connector.cassandra.RangeTombstoneContext;
+import io.debezium.connector.cassandra.Record;
+import io.debezium.connector.cassandra.RecordMaker;
+import io.debezium.connector.cassandra.SchemaHolder;
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.cql3.ColumnSpecification;
 import org.apache.cassandra.db.ClusteringBound;
@@ -53,22 +67,9 @@ import com.datastax.oss.driver.api.core.metadata.schema.TableMetadata;
 
 import io.debezium.DebeziumException;
 import io.debezium.connector.base.ChangeEventQueue;
-import io.debezium.connector.cassandra.CassandraConnectorContext;
-import io.debezium.connector.cassandra.CassandraSchemaFactory;
 import io.debezium.connector.cassandra.CassandraSchemaFactory.CellData;
 import io.debezium.connector.cassandra.CassandraSchemaFactory.RangeData;
 import io.debezium.connector.cassandra.CassandraSchemaFactory.RowData;
-import io.debezium.connector.cassandra.CommitLogProcessorMetrics;
-import io.debezium.connector.cassandra.Event;
-import io.debezium.connector.cassandra.Filters;
-import io.debezium.connector.cassandra.KeyValueSchema;
-import io.debezium.connector.cassandra.KeyspaceTable;
-import io.debezium.connector.cassandra.OffsetPosition;
-import io.debezium.connector.cassandra.OffsetWriter;
-import io.debezium.connector.cassandra.RangeTombstoneContext;
-import io.debezium.connector.cassandra.Record;
-import io.debezium.connector.cassandra.RecordMaker;
-import io.debezium.connector.cassandra.SchemaHolder;
 import io.debezium.connector.cassandra.exceptions.CassandraConnectorSchemaException;
 import io.debezium.connector.cassandra.transforms.CassandraTypeDeserializer;
 import io.debezium.time.Conversions;
@@ -92,6 +93,7 @@ public class DseCommitLogReadHandlerImpl implements CommitLogReadHandler {
     private final CommitLogProcessorMetrics metrics;
     private final RangeTombstoneContext<org.apache.cassandra.schema.TableMetadata> rangeTombstoneContext = new RangeTombstoneContext<>();
     private final CassandraSchemaFactory schemaFactory;
+    private CassandraConnectorConfig ConnectorConfig;
 
     DseCommitLogReadHandlerImpl(CassandraConnectorContext context, CommitLogProcessorMetrics metrics) {
         this.queues = context.getQueues();
@@ -102,6 +104,7 @@ public class DseCommitLogReadHandlerImpl implements CommitLogReadHandler {
         this.schemaHolder = context.getSchemaHolder();
         this.metrics = metrics;
         this.schemaFactory = CassandraSchemaFactory.get();
+        ConnectorConfig = context.getCassandraConnectorConfig();
     }
 
     /**
@@ -264,6 +267,10 @@ public class DseCommitLogReadHandlerImpl implements CommitLogReadHandler {
             OffsetPosition offsetPosition = new OffsetPosition(descriptor.fileName(), entryLocation);
             KeyspaceTable keyspaceTable = new KeyspaceTable(mutation.getKeyspaceName(), pu.metadata().name);
 
+            // --| filter the keyspaceTable if it is not inside the connector config
+            if(!ConnectorConfig.getTableIncludeList().contains(keyspaceTable.name())) {
+                return;
+            }
             if (offsetWriter.isOffsetProcessed(keyspaceTable.name(), offsetPosition.serialize(), false)) {
                 LOGGER.info("Mutation at {} for table {} already processed, skipping...", offsetPosition, keyspaceTable);
                 return;

@@ -80,6 +80,8 @@ public class Cassandra4CommitLogReadHandlerImpl implements CommitLogReadHandler 
     private final RangeTombstoneContext<org.apache.cassandra.schema.TableMetadata> rangeTombstoneContext = new RangeTombstoneContext<>();
     private final CassandraSchemaFactory schemaFactory;
 
+    private CassandraConnectorConfig ConnectorConfig;
+
     Cassandra4CommitLogReadHandlerImpl(CassandraConnectorContext context, CommitLogProcessorMetrics metrics) {
         this.queues = context.getQueues();
         this.recordMaker = new RecordMaker(context.getCassandraConnectorConfig().tombstonesOnDelete(),
@@ -89,6 +91,7 @@ public class Cassandra4CommitLogReadHandlerImpl implements CommitLogReadHandler 
         this.schemaHolder = context.getSchemaHolder();
         this.metrics = metrics;
         this.schemaFactory = CassandraSchemaFactory.get();
+        ConnectorConfig = context.getCassandraConnectorConfig();
     }
 
     /**
@@ -231,6 +234,7 @@ public class Cassandra4CommitLogReadHandlerImpl implements CommitLogReadHandler 
         }
     }
 
+    // --| handle the mutation of only those tables included inside the connector config
     @Override
     public void handleMutation(Mutation mutation, int size, int entryLocation, CommitLogDescriptor descriptor) {
         if (!mutation.trackedByCDC()) {
@@ -251,6 +255,10 @@ public class Cassandra4CommitLogReadHandlerImpl implements CommitLogReadHandler 
             OffsetPosition offsetPosition = new OffsetPosition(descriptor.fileName(), entryLocation);
             KeyspaceTable keyspaceTable = new KeyspaceTable(mutation.getKeyspaceName(), pu.metadata().name);
 
+            // --| filter the keyspaceTable if it is not inside the connector config
+            if(!ConnectorConfig.getTableIncludeList().contains(keyspaceTable.name())) {
+                return;
+            }
             if (offsetWriter.isOffsetProcessed(keyspaceTable.name(), offsetPosition.serialize(), false)) {
                 LOGGER.info("Mutation at {} for table {} already processed, skipping...", offsetPosition, keyspaceTable);
                 return;

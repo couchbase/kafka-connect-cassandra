@@ -81,6 +81,7 @@ public class Cassandra3CommitLogReadHandlerImpl implements CommitLogReadHandler 
     private final CommitLogProcessorMetrics metrics;
     private final RangeTombstoneContext<CFMetaData> rangeTombstoneContext = new RangeTombstoneContext<>();
     private final CassandraSchemaFactory schemaFactory;
+    private CassandraConnectorConfig ConnectorConfig;
 
     Cassandra3CommitLogReadHandlerImpl(CassandraConnectorContext context, CommitLogProcessorMetrics metrics) {
         this.queues = context.getQueues();
@@ -91,6 +92,7 @@ public class Cassandra3CommitLogReadHandlerImpl implements CommitLogReadHandler 
         this.schemaHolder = context.getSchemaHolder();
         this.metrics = metrics;
         this.schemaFactory = CassandraSchemaFactory.get();
+        ConnectorConfig = context.getCassandraConnectorConfig();
     }
 
     /**
@@ -252,6 +254,11 @@ public class Cassandra3CommitLogReadHandlerImpl implements CommitLogReadHandler 
         for (PartitionUpdate pu : mutation.getPartitionUpdates()) {
             OffsetPosition offsetPosition = new OffsetPosition(descriptor.fileName(), entryLocation);
             KeyspaceTable keyspaceTable = new KeyspaceTable(mutation.getKeyspaceName(), pu.metadata().cfName);
+
+            // --| filter the keyspaceTable if it is not inside the connector config
+            if(!ConnectorConfig.getTableIncludeList().contains(keyspaceTable.name())) {
+                return;
+            }
 
             if (offsetWriter.isOffsetProcessed(keyspaceTable.name(), offsetPosition.serialize(), false)) {
                 LOGGER.info("Mutation at {} for table {} already processed, skipping...", offsetPosition, keyspaceTable);
